@@ -1,0 +1,50 @@
+# Preview for review (plan morning-digest § 3, ADR 0003).
+# Renders /digest/2026-10-28 as one HTML file and puts it on GitHub Pages as an artifact,
+# so the preview never lands in the repo. The banner shows the LANE_MARKER secret; with the
+# secret removed it reads "no marker set". Run again to upload over the same link (§ 4).
+name: preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g pnpm@12.18.0
+      - run: pnpm install --frozen-lockfile
+      - name: Save /digest/2026-10-28 as one HTML file
+        env:
+          LANE_MARKER: ${{ secrets.LANE_MARKER }}
+        run: |
+          pnpm start &
+          for i in $(seq 1 30); do curl -fsS http://localhost:8787/health >/dev/null && break; sleep 1; done
+          mkdir -p _site
+          curl -fsS http://localhost:8787/digest/2026-10-28 -o _site/index.html
+          grep -o '<span class="marker">[^<]*</span>' _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
